@@ -1,8 +1,12 @@
 package com.zuicodiing.platform.redis;
 
+import com.zuicodiing.platform.redis.command.Command;
+import com.zuicodiing.platform.redis.constant.Constant;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.Socket;
 
 /**
@@ -12,21 +16,26 @@ import java.net.Socket;
  */
 public class MyRedisClient {
 
-    private String ip;
-    private int port = 6379;
 
     private InputStream reader;
     private OutputStream writer;
 
     private Socket socket;
+
+    public MyRedisClient() throws IOException {
+        this("127.0.0.1",6379);
+    }
+
+
+
     public MyRedisClient(String ip) throws IOException {
-        this.ip = ip;
+        this(ip,6379);
+    }
 
+    public MyRedisClient(String ip, int port) throws IOException {
         socket = new Socket(ip,port);
-
         reader = socket.getInputStream();
         writer = socket.getOutputStream();
-
     }
 
     /**
@@ -46,23 +55,51 @@ public class MyRedisClient {
      */
     public String set(String key, String value) throws IOException {
         StringBuilder command = new StringBuilder();
-        command.append("*3").append("\r\n");
-        command.append("$3").append("\r\n");
-        command.append("SET").append("\r\n");
-        command.append("$").append(key.getBytes().length).append("\r\n");
-        command.append(key).append("\r\n");
-        command.append("$").append(value.getBytes().length).append("\r\n");
-        command.append(value).append("\r\n");
+        command.append(Command.SET.buildCommand());
+        command.append("$").append(key.getBytes("UTF-8").length).append(Constant.END_LINE);
+        command.append(key).append(Constant.END_LINE);
+        command.append("$").append(value.getBytes("UTF-8").length).append(Constant.END_LINE);
+        command.append(value).append(Constant.END_LINE);
 
-        System.err.println(command.toString());
+        sendCommand(command);
 
-        writer.write(command.toString().getBytes());
+        return response();
 
+    }
+
+    private void sendCommand(StringBuilder command) throws IOException {
+        writer.write(command.toString().getBytes("UTF-8") );
         writer.flush();
-        byte[] buffer = new byte[512];
-        reader.read(buffer);
-        return new String(buffer);
+    }
 
+    public String slaveOf(String server,int port) throws IOException {
+        StringBuilder command = new StringBuilder();
+        command.append(Command.SLAVEOF.buildCommand());
+        command.append("$").append(server.getBytes().length).append(Constant.END_LINE);
+        command.append(server).append(Constant.END_LINE);
+        //command.append("$").append(String.valueOf(port).getBytes().length).append(Constant.END_LINE);
+        command.append("$").append(String.valueOf(port).getBytes().length).append(Constant.END_LINE);
+        command.append(port).append(Constant.END_LINE);
+        System.err.println(command.toString());
+        sendCommand(command);
+
+        return response();
+    }
+
+    private String response() throws IOException {
+        byte[] buffer = new byte[8192];
+        int limit = reader.read(buffer);
+
+        return new String(buffer,0,limit);
+    }
+
+    public String get(String key) throws IOException {
+        StringBuilder command = new StringBuilder();
+        command.append(Command.GET.buildCommand());
+        command.append("$").append(key.getBytes("UTF-8").length).append(Constant.END_LINE);
+        command.append(key).append(Constant.END_LINE);
+        sendCommand(command);
+        return response();
     }
 
     /**
@@ -83,6 +120,11 @@ public class MyRedisClient {
 
     public static void main(String[] args) throws IOException {
        //System.err.println( new MyRedisClient("127.0.0.1").set("hello","张三"));
-        new MyRedisClient("127.0.0.1").getSubscripe().topic("demo");
+       // new MyRedisClient("127.0.0.1").getSubscripe().topic("demo");
+       MyRedisClient client = new MyRedisClient();
+       // System.err.println("set command:" + client.set("test-1","test"));
+        //System.err.println("get command:"+client.get("12345678901"));
+
+        System.err.println(client.slaveOf("127.0.0.1",6379));
     }
 }
